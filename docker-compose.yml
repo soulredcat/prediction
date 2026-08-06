@@ -4,8 +4,10 @@ services:
     environment:
       API_ADDR: ":8080"
       DATA_FILE: /app/data/btc_prices.json
+      COMPARISON_DIR: /app/data/comparisons
     volumes:
       - ./data/btc_prices.json:/app/data/btc_prices.json:ro
+      - ./data/comparisons:/app/data/comparisons:ro
     ports:
       - "8080:8080"
     restart: unless-stopped

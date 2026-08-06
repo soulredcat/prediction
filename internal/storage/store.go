@@ -51,7 +51,14 @@ func (s *Store) Ensure() error {
 		return err
 	}
 	if _, err := os.Stat(s.pricePath); errors.Is(err, os.ErrNotExist) {
-		if err := writeAtomic(s.pricePath, market.Dataset{Version: 1, Asset: "bitcoin", Quote: "usd", Source: "coingecko", Prices: []market.PricePoint{}}); err != nil {
+		if err := writeAtomic(s.pricePath, market.Dataset{
+			Version:  1,
+			Asset:    "bitcoin",
+			Quote:    "usd",
+			Interval: "1d",
+			Source:   "static-repository-snapshot",
+			Prices:   []market.PricePoint{},
+		}); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -78,12 +85,6 @@ func (s *Store) LoadPrices() (market.Dataset, error) {
 		value.Prices = []market.PricePoint{}
 	}
 	return value, nil
-}
-
-func (s *Store) SavePrices(value market.Dataset) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return writeAtomic(s.pricePath, value)
 }
 
 func (s *Store) LoadModel() (Model, error) {

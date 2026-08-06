@@ -2,7 +2,9 @@
   "version": 1,
   "asset": "bitcoin",
   "quote": "usd",
-  "source": "coingecko",
+  "interval": "1d",
+  "source": "coinmetrics-community-data",
+  "source_url": "https://raw.githubusercontent.com/coinmetrics/data/master/csv/btc.csv",
   "updated_at": null,
   "prices": []
 }

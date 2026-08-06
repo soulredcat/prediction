@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/import-prices.yml"
       - "cmd/import-prices/**"
+      - "internal/market/**"
 
 permissions:
   contents: write

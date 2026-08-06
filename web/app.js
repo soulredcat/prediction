@@ -10,11 +10,6 @@ async function api(path, options = {}) {
   return payload;
 }
 
-function setBusy(busy) {
-  $("sync-button").disabled = busy;
-  $("sync-button").textContent = busy ? "Processing…" : "Sync prices";
-}
-
 function showError(error) {
   const element = $("error");
   if (!error) {
@@ -38,11 +33,15 @@ function render() {
   if (!prices || !cycles) return;
 
   const latest = prices.prices.at(-1);
+  const first = prices.prices.at(0);
   $("metric-model").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} days`;
   $("metric-points").textContent = prices.prices.length.toLocaleString("en-US");
   $("metric-price").textContent = latest ? `$${latest.price_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
   $("metric-cycles").textContent = `${cycles.items.length} cycles`;
-  $("chart-meta").textContent = `source: ${prices.source} · updated: ${prices.updated_at ? prices.updated_at.replace("T", " ").slice(0, 19) + " UTC" : "not synced"}`;
+
+  const range = first && latest ? `${first.date} → ${latest.date}` : "empty dataset";
+  const updated = prices.updated_at ? prices.updated_at.replace("T", " ").slice(0, 19) + " UTC" : "repository snapshot";
+  $("chart-meta").textContent = `${prices.source} · ${range} · generated ${updated}`;
 
   $("anchor-ath").value = cycles.model.anchor_ath.slice(0, 10);
   $("bear-days").value = cycles.model.bear_days;
@@ -126,19 +125,6 @@ async function load() {
     showError(error);
   }
 }
-
-$("sync-button").addEventListener("click", async () => {
-  setBusy(true);
-  showError(null);
-  try {
-    state.prices = await api("/api/v1/market/sync?from=2010-07-17", { method: "POST" });
-    render();
-  } catch (error) {
-    showError(error);
-  } finally {
-    setBusy(false);
-  }
-});
 
 $("model-form").addEventListener("submit", async (event) => {
   event.preventDefault();

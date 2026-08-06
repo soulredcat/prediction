@@ -32,25 +32,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	provider := market.NewCoinGeckoProvider(cfg.CoinGeckoBaseURL, cfg.CoinGeckoAPIKey, cfg.CoinGeckoAPITier)
-	marketService := market.NewService(provider, store)
+	marketService := market.NewService(store)
 	cycleService := cycle.NewService(store)
 	handler := httpapi.New(logger, marketService, cycleService, webassets.Assets)
-
-	if cfg.AutoSync {
-		go func() {
-			if _, err := marketService.Sync(cfg.SyncFrom, time.Now().UTC().Add(24*time.Hour)); err != nil {
-				logger.Error("auto sync", "error", err)
-			}
-		}()
-	}
 
 	server := &http.Server{
 		Addr:              cfg.APIAddr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      90 * time.Second,
+		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
 

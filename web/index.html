@@ -13,9 +13,8 @@
       <div>
         <p class="eyebrow">BITCOIN TIME-CYCLE RESEARCH</p>
         <h1>BTC Cycle Prediction Dashboard</h1>
-        <p class="subtitle">The price chart stops at the latest actual data point. Future output contains cycle dates only, projected through year 2200.</p>
+        <p class="subtitle">The chart uses the repository's static BTC/USD JSON snapshot. The application performs no runtime market-data requests.</p>
       </div>
-      <button id="sync-button" class="primary">Sync prices</button>
     </header>
 
     <div id="error" class="error hidden"></div>
@@ -29,9 +28,9 @@
 
     <section class="panel">
       <div class="panel-heading">
-        <div><h2>Actual BTC price</h2><p id="chart-meta">No data available</p></div>
+        <div><h2>Historical BTC price</h2><p id="chart-meta">Loading repository dataset</p></div>
       </div>
-      <div id="chart-empty" class="empty">No price data available. Configure the CoinGecko API key, then click <strong>Sync prices</strong>.</div>
+      <div id="chart-empty" class="empty">The static price dataset is empty. Run the repository price importer and commit data/btc_prices.json.</div>
       <div id="chart" class="chart hidden"></div>
     </section>
 

@@ -5,13 +5,8 @@ services:
       API_ADDR: ":8080"
       DATA_FILE: /app/data/btc_prices.json
       MODEL_FILE: /app/data/model_config.json
-      AUTO_SYNC: ${AUTO_SYNC:-false}
-      SYNC_FROM: ${SYNC_FROM:-2010-07-17}
-      COINGECKO_API_TIER: ${COINGECKO_API_TIER:-demo}
-      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
-      COINGECKO_BASE_URL: ${COINGECKO_BASE_URL:-}
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:ro
     ports:
       - "8080:8080"
     restart: unless-stopped

@@ -27,7 +27,6 @@ func New(logger *slog.Logger, marketService *market.Service, cycleService *cycle
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", router.health)
 	mux.HandleFunc("GET /api/v1/prices", router.getPrices)
-	mux.HandleFunc("POST /api/v1/market/sync", router.syncPrices)
 	mux.HandleFunc("GET /api/v1/model", router.getModel)
 	mux.HandleFunc("PUT /api/v1/model", router.updateModel)
 	mux.HandleFunc("GET /api/v1/cycles", router.getCycles)
@@ -43,25 +42,6 @@ func (r *Router) getPrices(w http.ResponseWriter, _ *http.Request) {
 	value, err := r.market.Get()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, value)
-}
-
-func (r *Router) syncPrices(w http.ResponseWriter, request *http.Request) {
-	from, err := parseDate(request.URL.Query().Get("from"), "2010-07-17")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	to, err := parseDate(request.URL.Query().Get("to"), time.Now().UTC().Add(24*time.Hour).Format("2006-01-02"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	value, err := r.market.Sync(from, to)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, value)
@@ -109,17 +89,6 @@ func (r *Router) getCycles(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, value)
-}
-
-func parseDate(raw, fallback string) (time.Time, error) {
-	if strings.TrimSpace(raw) == "" {
-		raw = fallback
-	}
-	value, err := time.Parse("2006-01-02", raw)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("date must use YYYY-MM-DD: %w", err)
-	}
-	return value.UTC(), nil
 }
 
 func securityHeaders(next http.Handler) http.Handler {

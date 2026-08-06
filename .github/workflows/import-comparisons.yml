@@ -92,7 +92,7 @@ jobs:
           go vet ./...
       - name: Commit refreshed snapshots
         run: |
-          if git diff --quiet -- data/comparisons; then
+          if [ -z "$(git status --porcelain -- data/comparisons)" ]; then
             echo "Comparison snapshots are already current."
             exit 0
           fi

@@ -1,10 +1,8 @@
 # BTC Cycle Prediction Dashboard
 
-A single-binary Go dashboard that compares static Bitcoin price history with a hardcoded fixed-time cycle model.
+A full-screen, single-binary Go dashboard with Bitcoin as the only priced asset and the only projected cycle model.
 
-## Hardcoded cycle model
-
-The cycle values are intentionally fixed in source code and cannot be edited from the dashboard:
+## Hardcoded BTC cycle model
 
 - ATH anchor: `2017-12-16T00:00:00Z`
 - ATH → low: `370` days
@@ -13,25 +11,34 @@ The cycle values are intentionally fixed in source code and cannot be edited fro
 - tolerance window: `±30` days
 - projection horizon: through year `2200`
 
-The dashboard renders all `47` projected cycles. The final projected ATH is `June 28, 2197`, and the final projected low is `July 3, 2198`.
+The BTC price line stops at the final historical data point. ATH and low date markers continue through year 2200 without inventing a future price path.
 
-## Static price data
+## One chart with optional historical comparisons
 
-The running application makes no external market-data requests. It reads the repository snapshot directly from:
+BTC remains the main chart and the vertical axis always shows BTC/USD. Optional checkboxes add these daily historical shape overlays to the same chart:
+
+- Gold (XAU/USD)
+- Nasdaq-100
+- Nominal Broad U.S. Dollar Index
+- WTI crude oil
+
+Comparison prices are never shown on the BTC axis. Each enabled series is independently normalized to its own historical range so the overlay communicates timing and direction only. Comparison and BTC lines stop at the final BTC snapshot date; none of the comparison assets is projected into the future.
+
+Static comparison snapshots are stored under:
 
 ```text
-data/btc_prices.json
+data/comparisons/
 ```
 
-The JSON file contains daily BTC/USD reference prices from the earliest date for which the upstream dataset has a positive `PriceUSD` value. Rows before a market price existed are intentionally omitted rather than filled with invented values.
+## Static data sources
 
-The snapshot is generated from the Coin Metrics Community Data BTC CSV:
+- BTC/USD: Coin Metrics Community Data
+- Nasdaq-100: FRED series `NASDAQ100`
+- Broad USD index: FRED series `DTWEXBGS`
+- WTI oil: FRED series `DCOILWTICO`
+- Gold: Stooq `XAUUSD`
 
-```text
-https://raw.githubusercontent.com/coinmetrics/data/master/csv/btc.csv
-```
-
-External access is used only by the offline importer or the GitHub Actions refresh workflow. The dashboard itself can run without internet access.
+The running application makes no external market-data requests. GitHub Actions downloads the public CSV files, generates repository JSON snapshots, validates the project, and commits updated data. No API key is required.
 
 ## Run without Docker
 
@@ -56,32 +63,25 @@ go build -o prediction.exe ./cmd/server
 .\prediction.exe
 ```
 
-## Refresh the repository snapshot
+## Chart interaction
 
-Manual refresh:
-
-```bash
-make refresh-prices
-```
-
-Import an already downloaded Coin Metrics CSV:
-
-```bash
-make import-prices CSV=/path/to/btc.csv
-```
-
-GitHub Actions also provides the `refresh-static-btc-prices` workflow. It downloads the public CSV, generates `data/btc_prices.json`, runs validation, and commits the changed snapshot. No API key is required.
+- Drag horizontally to move through time.
+- Use `+` and `−` or `Ctrl + mouse wheel` to zoom.
+- Use **Fit history**, **Data end**, and **Year 2200** for navigation.
+- Use **Full screen** to occupy the browser display.
+- Enable comparison overlays with the checkboxes above the chart.
 
 ## API
 
 ```text
 GET /healthz
 GET /api/v1/prices
+GET /api/v1/comparisons
 GET /api/v1/cycles
 ```
 
-There is no runtime price-sync endpoint and no model-configuration endpoint.
+There is no runtime data-sync endpoint and no editable model endpoint.
 
 ## Limitations
 
-The cycle model projects dates, not future prices. The mature-cycle dataset is small, so the `370 / 1,055.5` constants may be overfit. Treat the output as a research time window, not as a deterministic trading signal.
+Comparison overlays are visual shape comparisons, not price forecasts, correlations, or trading signals. The fixed BTC cycle constants may be overfit because the mature-cycle sample remains small.

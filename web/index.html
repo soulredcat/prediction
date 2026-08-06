@@ -30,14 +30,26 @@
       <span><strong id="model-status">—</strong></span>
       <span><strong id="data-status">—</strong></span>
       <span><strong id="zoom-status">—</strong></span>
+      <span><strong id="comparison-status">No comparison overlays</strong></span>
       <span class="legend-item"><i class="legend-line price-legend"></i>Actual BTC price</span>
       <span class="legend-item"><i class="legend-line ath-legend"></i>ATH</span>
       <span class="legend-item"><i class="legend-line low-legend"></i>Low</span>
     </section>
 
+    <section class="comparison-strip" aria-label="Historical comparison overlays">
+      <span class="comparison-title">Shape overlay</span>
+      <label class="series-toggle btc-toggle">
+        <input type="checkbox" checked disabled>
+        <i class="comparison-swatch comparison-btc"></i>
+        BTC
+      </label>
+      <div id="comparison-controls" class="comparison-controls" aria-live="polite">Loading comparison data…</div>
+      <span class="comparison-note">Comparison lines show independently normalized direction only. The price axis remains BTC/USD.</span>
+    </section>
+
     <div id="error" class="error hidden"></div>
 
-    <section class="chart-stage" aria-label="Bitcoin price and cycle chart">
+    <section class="chart-stage" aria-label="Bitcoin price, cycle dates, and optional comparison overlays">
       <div id="chart-empty" class="empty hidden">The static BTC price dataset is empty.</div>
       <div id="chart-viewport" class="chart-viewport" tabindex="0" aria-label="Scrollable and zoomable Bitcoin chart through year 2200">
         <div id="chart-canvas" class="chart-canvas"></div>

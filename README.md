@@ -17,7 +17,7 @@ The BTC price line stops at the final historical data point. ATH and low date ma
 
 BTC remains the main chart and the vertical axis always shows BTC/USD. Optional checkboxes add these daily historical shape overlays to the same chart:
 
-- Gold (XAU/USD)
+- PHLX Gold/Silver Sector proxy
 - Nasdaq-100
 - Nominal Broad U.S. Dollar Index
 - WTI crude oil
@@ -33,12 +33,12 @@ data/comparisons/
 ## Static data sources
 
 - BTC/USD: Coin Metrics Community Data
+- Gold/Silver sector proxy: FRED series `NASDAQXAU`
 - Nasdaq-100: FRED series `NASDAQ100`
 - Broad USD index: FRED series `DTWEXBGS`
 - WTI oil: FRED series `DCOILWTICO`
-- Gold: Stooq `XAUUSD`
 
-The running application makes no external market-data requests. GitHub Actions downloads the public CSV files, generates repository JSON snapshots, validates the project, and commits updated data. No API key is required.
+The gold checkbox is explicitly a listed gold-and-silver equity-sector proxy, not the XAU/USD spot price. The running application makes no external market-data requests. GitHub Actions downloads the public CSV files, generates repository JSON snapshots, validates the project, and commits updated data. No API key is required.
 
 ## Run without Docker
 

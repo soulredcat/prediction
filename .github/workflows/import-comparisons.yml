@@ -41,7 +41,7 @@ jobs:
           curl --fail --location --retry 3 \
             --user-agent "Mozilla/5.0 (compatible; prediction-data-refresh/1.0)" \
             "https://stooq.pl/q/d/l/?s=xauusd&i=d" \
-            --output /tmp/comparisons/gold.csv
+            --output /tmp/comparisons/gold.csv || true
       - name: Generate static comparison snapshots
         run: |
           mkdir -p data/comparisons
@@ -72,14 +72,19 @@ jobs:
             -source "FRED / U.S. EIA" \
             -source-url "https://fred.stlouisfed.org/series/DCOILWTICO" \
             -output data/comparisons/wti.json
-          go run ./cmd/import-comparisons \
+          if [ -s /tmp/comparisons/gold.csv ] && go run ./cmd/import-comparisons \
             -id gold \
             -label "Gold (XAU/USD)" \
             -input /tmp/comparisons/gold.csv \
             -format stooq \
             -source "Stooq XAU/USD" \
             -source-url "https://stooq.pl/q/d/?s=xauusd" \
-            -output data/comparisons/gold.json
+            -output data/comparisons/gold.json; then
+            echo "Gold snapshot generated."
+          else
+            echo "::warning::Gold CSV is unavailable or blocked; publishing the other comparison snapshots."
+            rm -f data/comparisons/gold.json
+          fi
       - name: Validate project
         run: |
           node --check web/app.js

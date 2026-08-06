@@ -1,0 +1,50 @@
+name: refresh-static-btc-prices
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/import-prices.yml"
+      - "cmd/import-prices/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-static-btc-prices
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Download Coin Metrics community CSV snapshot
+        run: |
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/coinmetrics/data/master/csv/btc.csv \
+            --output /tmp/btc.csv
+      - name: Generate repository JSON dataset
+        run: |
+          go run ./cmd/import-prices \
+            -input /tmp/btc.csv \
+            -output ./data/btc_prices.json
+      - name: Validate project
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Commit refreshed dataset
+        run: |
+          if git diff --quiet -- data/btc_prices.json; then
+            echo "Dataset is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/btc_prices.json
+          git commit -m "data: refresh static BTC price history"
+          git push

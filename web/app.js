@@ -12,7 +12,7 @@ async function api(path, options = {}) {
 
 function setBusy(busy) {
   $("sync-button").disabled = busy;
-  $("sync-button").textContent = busy ? "Memproses…" : "Sync harga";
+  $("sync-button").textContent = busy ? "Processing…" : "Sync prices";
 }
 
 function showError(error) {
@@ -38,11 +38,11 @@ function render() {
   if (!prices || !cycles) return;
 
   const latest = prices.prices.at(-1);
-  $("metric-model").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} hari`;
-  $("metric-points").textContent = prices.prices.length.toLocaleString("id-ID");
+  $("metric-model").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} days`;
+  $("metric-points").textContent = prices.prices.length.toLocaleString("en-US");
   $("metric-price").textContent = latest ? `$${latest.price_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
-  $("metric-cycles").textContent = `${cycles.items.length} siklus`;
-  $("chart-meta").textContent = `source: ${prices.source} · update: ${prices.updated_at ? prices.updated_at.replace("T", " ").slice(0, 19) + " UTC" : "belum sync"}`;
+  $("metric-cycles").textContent = `${cycles.items.length} cycles`;
+  $("chart-meta").textContent = `source: ${prices.source} · updated: ${prices.updated_at ? prices.updated_at.replace("T", " ").slice(0, 19) + " UTC" : "not synced"}`;
 
   $("anchor-ath").value = cycles.model.anchor_ath.slice(0, 10);
   $("bear-days").value = cycles.model.bear_days;

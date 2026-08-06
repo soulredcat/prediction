@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/soulredcat/prediction/internal/comparison"
 	"github.com/soulredcat/prediction/internal/config"
 	"github.com/soulredcat/prediction/internal/cycle"
 	"github.com/soulredcat/prediction/internal/httpapi"
@@ -33,8 +34,9 @@ func main() {
 	}
 
 	marketService := market.NewService(store)
+	comparisonService := comparison.NewService(cfg.ComparisonDir)
 	cycleService := cycle.NewService()
-	handler := httpapi.New(logger, marketService, cycleService, webassets.Assets)
+	handler := httpapi.New(logger, marketService, comparisonService, cycleService, webassets.Assets)
 
 	server := &http.Server{
 		Addr:              cfg.APIAddr,
@@ -48,7 +50,7 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		logger.Info("server started", "addr", cfg.APIAddr, "data_file", cfg.DataFile)
+		logger.Info("server started", "addr", cfg.APIAddr, "data_file", cfg.DataFile, "comparison_dir", cfg.ComparisonDir)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server", "error", err)
 			os.Exit(1)

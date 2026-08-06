@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "asset": "bitcoin",
+  "quote": "usd",
+  "source": "coingecko",
+  "updated_at": null,
+  "prices": []
+}

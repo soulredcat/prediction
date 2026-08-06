@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BTC Cycle Prediction</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">BITCOIN TIME-CYCLE RESEARCH</p>
+        <h1>BTC Cycle Prediction Dashboard</h1>
+        <p class="subtitle">Chart harga berhenti pada data aktual terakhir. Prediksi setelahnya hanya tanggal siklus sampai tahun 2200.</p>
+      </div>
+      <button id="sync-button" class="primary">Sync harga</button>
+    </header>
+
+    <div id="error" class="error hidden"></div>
+
+    <section class="metrics">
+      <article><span>Model</span><strong id="metric-model">—</strong></article>
+      <article><span>Data points</span><strong id="metric-points">—</strong></article>
+      <article><span>Harga terakhir</span><strong id="metric-price">—</strong></article>
+      <article><span>Proyeksi</span><strong id="metric-cycles">—</strong></article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div><h2>Harga BTC aktual</h2><p id="chart-meta">Belum ada data</p></div>
+      </div>
+      <div id="chart-empty" class="empty">Belum ada harga. Isi API key CoinGecko lalu tekan <strong>Sync harga</strong>.</div>
+      <div id="chart" class="chart hidden"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><h2>Konfigurasi model</h2><p>Disimpan di data/model_config.json.</p></div></div>
+      <form id="model-form" class="model-form">
+        <label>Anchor ATH<input id="anchor-ath" type="date" required></label>
+        <label>Bear days<input id="bear-days" type="number" step="0.5" min="1" required></label>
+        <label>Bull days<input id="bull-days" type="number" step="0.5" min="1" required></label>
+        <label>Sampai tahun<input id="until-year" type="number" min="2020" max="9999" required></label>
+        <label>Toleransi ± hari<input id="tolerance-days" type="number" min="0" max="365" required></label>
+        <button class="primary" type="submit">Simpan model</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><h2>Tabel prediksi tanggal</h2><p>Model waktu tetap, bukan prediksi harga.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cycle</th><th>Predicted ATH</th><th>ATH window</th><th>Predicted low</th></tr></thead>
+          <tbody id="cycle-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

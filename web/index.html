@@ -8,77 +8,39 @@
   <script src="/app.js" defer></script>
 </head>
 <body>
-  <main>
-    <header class="hero">
-      <div>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="title-block">
         <p class="eyebrow">BITCOIN TIME-CYCLE RESEARCH</p>
-        <h1>BTC Cycle Prediction Dashboard</h1>
-        <p class="subtitle">Historical BTC/USD prices stop at the final repository data point. Future ATH and low dates are rendered separately through year 2200 because the model predicts dates, not future prices.</p>
+        <h1>BTC Price & Cycle Chart</h1>
+        <p id="chart-meta" class="subtitle">Loading repository data…</p>
+      </div>
+
+      <div class="chart-actions" aria-label="Chart controls">
+        <button id="zoom-out" type="button" title="Zoom out">−</button>
+        <button id="zoom-in" type="button" title="Zoom in">+</button>
+        <button id="fit-history" type="button">Fit history</button>
+        <button id="go-data-end" type="button">Data end</button>
+        <button id="go-2200" type="button">Year 2200</button>
+        <button id="toggle-fullscreen" type="button">Full screen</button>
       </div>
     </header>
 
+    <section class="status-strip" aria-label="Chart status">
+      <span><strong id="model-status">—</strong></span>
+      <span><strong id="data-status">—</strong></span>
+      <span><strong id="zoom-status">—</strong></span>
+      <span class="legend-item"><i class="legend-line price-legend"></i>Actual BTC price</span>
+      <span class="legend-item"><i class="legend-line ath-legend"></i>ATH</span>
+      <span class="legend-item"><i class="legend-line low-legend"></i>Low</span>
+    </section>
+
     <div id="error" class="error hidden"></div>
 
-    <section class="metrics">
-      <article><span>Fixed model</span><strong id="metric-model">—</strong></article>
-      <article><span>Historical data points</span><strong id="metric-points">—</strong></article>
-      <article><span>Latest dataset price</span><strong id="metric-price">—</strong></article>
-      <article><span>Projection horizon</span><strong id="metric-cycles">—</strong></article>
-    </section>
-
-    <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Historical BTC price</h2>
-          <p id="chart-meta">Loading repository dataset</p>
-        </div>
-      </div>
-      <div id="chart-empty" class="empty">The static price dataset is empty. Import data into data/btc_prices.json.</div>
-      <div id="chart" class="chart hidden"></div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-heading timeline-heading">
-        <div>
-          <h2>Projected ATH / low timeline through 2200</h2>
-          <p id="timeline-meta">Loading all hardcoded cycle dates.</p>
-        </div>
-        <div class="timeline-actions" aria-label="Timeline navigation">
-          <button id="timeline-start" type="button">Start</button>
-          <button id="timeline-current" type="button">Data end</button>
-          <button id="timeline-end" type="button">Year 2200</button>
-        </div>
-      </div>
-      <div class="timeline-legend" aria-label="Timeline legend">
-        <span><i class="legend-dot legend-ath"></i>Predicted ATH</span>
-        <span><i class="legend-dot legend-low"></i>Predicted low</span>
-        <span><i class="legend-line legend-bear"></i>370-day bear phase</span>
-        <span><i class="legend-line legend-bull"></i>1,055.5-day bull phase</span>
-      </div>
-      <div id="forecast-timeline" class="forecast-timeline-wrap" tabindex="0" aria-label="Horizontally scrollable projected cycle timeline">
-        <div id="forecast-timeline-canvas" class="forecast-timeline-canvas"></div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>All projected dates</h2>
-          <p id="projection-meta">Loading all hardcoded ATH and low dates.</p>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Cycle</th>
-              <th>Predicted ATH date</th>
-              <th>ATH tolerance window</th>
-              <th>Predicted low date</th>
-            </tr>
-          </thead>
-          <tbody id="cycle-body"></tbody>
-        </table>
+    <section class="chart-stage" aria-label="Bitcoin price and cycle chart">
+      <div id="chart-empty" class="empty hidden">The static BTC price dataset is empty.</div>
+      <div id="chart-viewport" class="chart-viewport" tabindex="0" aria-label="Scrollable and zoomable Bitcoin chart through year 2200">
+        <div id="chart-canvas" class="chart-canvas"></div>
       </div>
     </section>
   </main>

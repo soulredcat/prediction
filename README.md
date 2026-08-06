@@ -1,22 +1,29 @@
 # BTC Cycle Prediction Dashboard
 
-A single-binary Go dashboard that compares static Bitcoin price history with a configurable fixed-time cycle model.
+A single-binary Go dashboard that compares static Bitcoin price history with a hardcoded fixed-time cycle model.
 
+## Hardcoded cycle model
+
+The cycle values are intentionally fixed in source code and cannot be edited from the dashboard:
+
+- ATH anchor: `2017-12-16T00:00:00Z`
 - ATH → low: `370` days
 - low → ATH: `1,055.5` days
 - full cycle: `1,425.5` days
-- default anchor: `2017-12-16T00:00:00Z`
+- tolerance window: `±30` days
 - projection horizon: through year `2200`
+
+The dashboard renders all `47` projected cycles. The final projected ATH is `June 28, 2197`, and the final projected low is `July 3, 2198`.
 
 ## Static price data
 
-The running application makes **no external market-data requests**. It reads the repository snapshot directly from:
+The running application makes no external market-data requests. It reads the repository snapshot directly from:
 
 ```text
 data/btc_prices.json
 ```
 
-The JSON file contains daily BTC/USD reference prices from the earliest date for which the upstream dataset has a positive `PriceUSD` value. Bitcoin network rows before a market price existed are intentionally omitted instead of being filled with invented zero or synthetic prices.
+The JSON file contains daily BTC/USD reference prices from the earliest date for which the upstream dataset has a positive `PriceUSD` value. Rows before a market price existed are intentionally omitted rather than filled with invented values.
 
 The snapshot is generated from the Coin Metrics Community Data BTC CSV:
 
@@ -24,13 +31,16 @@ The snapshot is generated from the Coin Metrics Community Data BTC CSV:
 https://raw.githubusercontent.com/coinmetrics/data/master/csv/btc.csv
 ```
 
-External access is used only by the offline importer or the GitHub Actions refresh workflow. The dashboard itself remains deterministic and can run without internet access.
+External access is used only by the offline importer or the GitHub Actions refresh workflow. The dashboard itself can run without internet access.
 
-## Run
+## Run without Docker
 
-```bash
-cp .env.example .env
-docker compose up --build
+Requirements: Go `1.23` or newer.
+
+```powershell
+git clone https://github.com/soulredcat/prediction.git
+cd prediction
+go run ./cmd/server
 ```
 
 Open:
@@ -39,15 +49,16 @@ Open:
 http://localhost:8080
 ```
 
-Or run without Docker:
+Build a Windows executable:
 
-```bash
-make run
+```powershell
+go build -o prediction.exe ./cmd/server
+.\prediction.exe
 ```
 
 ## Refresh the repository snapshot
 
-Manual local refresh:
+Manual refresh:
 
 ```bash
 make refresh-prices
@@ -64,39 +75,12 @@ GitHub Actions also provides the `refresh-static-btc-prices` workflow. It downlo
 ## API
 
 ```text
-GET  /healthz
-GET  /api/v1/prices
-GET  /api/v1/model
-PUT  /api/v1/model
-GET  /api/v1/cycles?until_year=2200
+GET /healthz
+GET /api/v1/prices
+GET /api/v1/cycles
 ```
 
-There is intentionally no runtime sync endpoint.
-
-## Price JSON format
-
-```json
-{
-  "version": 1,
-  "asset": "bitcoin",
-  "quote": "usd",
-  "interval": "1d",
-  "source": "coinmetrics-community-data",
-  "source_url": "https://raw.githubusercontent.com/coinmetrics/data/master/csv/btc.csv",
-  "updated_at": "2026-08-06T12:00:00Z",
-  "prices": [
-    {
-      "timestamp": "2010-07-18T00:00:00Z",
-      "date": "2010-07-18",
-      "price_usd": 0.08584
-    }
-  ]
-}
-```
-
-## Storage behavior
-
-The model configuration remains writable through the dashboard and is stored in `data/model_config.json` using a temporary file, `fsync`, and atomic rename. The price file is read-only at runtime and is updated only through the importer.
+There is no runtime price-sync endpoint and no model-configuration endpoint.
 
 ## Limitations
 

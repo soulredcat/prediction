@@ -13,44 +13,44 @@
       <div>
         <p class="eyebrow">BITCOIN TIME-CYCLE RESEARCH</p>
         <h1>BTC Cycle Prediction Dashboard</h1>
-        <p class="subtitle">The chart uses the repository's static BTC/USD JSON snapshot. The application performs no runtime market-data requests.</p>
+        <p class="subtitle">Historical BTC/USD prices are loaded from the repository JSON snapshot. Cycle parameters are fixed in code and projections are shown through year 2200.</p>
       </div>
     </header>
 
     <div id="error" class="error hidden"></div>
 
     <section class="metrics">
-      <article><span>Model</span><strong id="metric-model">—</strong></article>
-      <article><span>Data points</span><strong id="metric-points">—</strong></article>
-      <article><span>Latest price</span><strong id="metric-price">—</strong></article>
-      <article><span>Projections</span><strong id="metric-cycles">—</strong></article>
+      <article><span>Fixed model</span><strong id="metric-model">—</strong></article>
+      <article><span>Historical data points</span><strong id="metric-points">—</strong></article>
+      <article><span>Latest dataset price</span><strong id="metric-price">—</strong></article>
+      <article><span>Projection horizon</span><strong id="metric-cycles">—</strong></article>
     </section>
 
     <section class="panel">
       <div class="panel-heading">
         <div><h2>Historical BTC price</h2><p id="chart-meta">Loading repository dataset</p></div>
       </div>
-      <div id="chart-empty" class="empty">The static price dataset is empty. Run the repository price importer and commit data/btc_prices.json.</div>
+      <div id="chart-empty" class="empty">The static price dataset is empty. Import data into data/btc_prices.json.</div>
       <div id="chart" class="chart hidden"></div>
     </section>
 
     <section class="panel">
-      <div class="panel-heading"><div><h2>Model configuration</h2><p>Stored in data/model_config.json.</p></div></div>
-      <form id="model-form" class="model-form">
-        <label>ATH anchor<input id="anchor-ath" type="date" required></label>
-        <label>Bear phase days<input id="bear-days" type="number" step="0.5" min="1" required></label>
-        <label>Bull phase days<input id="bull-days" type="number" step="0.5" min="1" required></label>
-        <label>Projection end year<input id="until-year" type="number" min="2020" max="9999" required></label>
-        <label>Tolerance ± days<input id="tolerance-days" type="number" min="0" max="365" required></label>
-        <button class="primary" type="submit">Save model</button>
-      </form>
-    </section>
-
-    <section class="panel">
-      <div class="panel-heading"><div><h2>Cycle date projections</h2><p>Fixed-time model output, not a future price forecast.</p></div></div>
+      <div class="panel-heading">
+        <div>
+          <h2>Cycle dates through 2200</h2>
+          <p id="projection-meta">Loading all hardcoded ATH and low dates.</p>
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Cycle</th><th>Predicted ATH</th><th>ATH window</th><th>Predicted low</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Cycle</th>
+              <th>Predicted ATH date</th>
+              <th>ATH tolerance window</th>
+              <th>Predicted low date</th>
+            </tr>
+          </thead>
           <tbody id="cycle-body"></tbody>
         </table>
       </div>

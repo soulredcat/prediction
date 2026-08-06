@@ -2,9 +2,21 @@
 
 const state = { prices: null, cycles: null };
 const $ = (id) => document.getElementById(id);
+const longDateFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC"
+});
+const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC"
+});
 
-async function api(path, options = {}) {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+async function api(path) {
+  const response = await fetch(path, { headers: { "Content-Type": "application/json" } });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
   return payload;
@@ -23,8 +35,16 @@ function showError(error) {
 
 function formatDateTime(value) {
   const date = new Date(value);
-  const day = date.toISOString().slice(0, 10);
-  return date.getUTCHours() === 12 ? `${day} 12:00 UTC` : day;
+  const label = longDateFormatter.format(date);
+  return date.getUTCHours() === 12 ? `${label}, 12:00 UTC` : label;
+}
+
+function formatDateOnly(value) {
+  return longDateFormatter.format(new Date(value));
+}
+
+function formatShortDate(value) {
+  return shortDateFormatter.format(new Date(value));
 }
 
 function render() {
@@ -34,25 +54,26 @@ function render() {
 
   const latest = prices.prices.at(-1);
   const first = prices.prices.at(0);
+  const firstProjection = cycles.items.at(0);
+  const lastProjection = cycles.items.at(-1);
+
   $("metric-model").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} days`;
   $("metric-points").textContent = prices.prices.length.toLocaleString("en-US");
   $("metric-price").textContent = latest ? `$${latest.price_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
-  $("metric-cycles").textContent = `${cycles.items.length} cycles`;
+  $("metric-cycles").textContent = `${cycles.items.length} cycles · through ${cycles.model.until_year}`;
 
-  const range = first && latest ? `${first.date} → ${latest.date}` : "empty dataset";
-  const updated = prices.updated_at ? prices.updated_at.replace("T", " ").slice(0, 19) + " UTC" : "repository snapshot";
+  const range = first && latest ? `${formatDateOnly(first.timestamp)} → ${formatDateOnly(latest.timestamp)}` : "empty dataset";
+  const updated = prices.updated_at ? formatDateTime(prices.updated_at) : "repository snapshot";
   $("chart-meta").textContent = `${prices.source} · ${range} · generated ${updated}`;
 
-  $("anchor-ath").value = cycles.model.anchor_ath.slice(0, 10);
-  $("bear-days").value = cycles.model.bear_days;
-  $("bull-days").value = cycles.model.bull_days;
-  $("until-year").value = cycles.model.until_year;
-  $("tolerance-days").value = cycles.model.tolerance_days;
+  if (firstProjection && lastProjection) {
+    $("projection-meta").textContent = `All ${cycles.items.length} cycles are displayed. First ATH: ${formatDateTime(firstProjection.ath)}. Final ATH: ${formatDateTime(lastProjection.ath)}. Final low: ${formatDateTime(lastProjection.low)}.`;
+  }
 
   $("cycle-body").innerHTML = cycles.items.map((item) => `<tr>
     <td>${String(item.cycle_number).padStart(2, "0")}</td>
     <td>${formatDateTime(item.ath)}</td>
-    <td>${item.window_start.slice(0, 10)} — ${item.window_end.slice(0, 10)}</td>
+    <td>${formatDateOnly(item.window_start)} — ${formatDateOnly(item.window_end)}</td>
     <td>${formatDateTime(item.low)}</td>
   </tr>`).join("");
 
@@ -80,14 +101,20 @@ function renderChart(prices, projections) {
   const maxLog = Math.ceil(Math.max(...logs));
   const x = (time) => margin.left + ((time - start) / (end - start)) * innerW;
   const y = (price) => margin.top + ((maxLog - Math.log10(price)) / (maxLog - minLog)) * innerH;
-  const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c]);
+  const esc = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[character]);
 
   const path = prices.map((point, index) => `${index ? "L" : "M"}${x(new Date(point.timestamp).getTime()).toFixed(2)},${y(point.price_usd).toFixed(2)}`).join(" ");
   const yTicks = [];
   for (let power = minLog; power <= maxLog; power++) {
     const price = 10 ** power;
     const py = y(price);
-    yTicks.push(`<line class="grid-line" x1="${margin.left}" y1="${py}" x2="${width-margin.right}" y2="${py}"/><text class="axis-label" x="${margin.left-10}" y="${py+4}" text-anchor="end">$${price.toLocaleString("en-US")}</text>`);
+    yTicks.push(`<line class="grid-line" x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}"/><text class="axis-label" x="${margin.left - 10}" y="${py + 4}" text-anchor="end">$${price.toLocaleString("en-US")}</text>`);
   }
 
   const startYear = new Date(start).getUTCFullYear();
@@ -96,7 +123,7 @@ function renderChart(prices, projections) {
   const xTicks = [];
   for (let year = startYear; year <= endYear; year += step) {
     const px = x(Date.UTC(year, 0, 1));
-    xTicks.push(`<line class="grid-line" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height-margin.bottom}"/><text class="axis-label" x="${px}" y="${height-18}" text-anchor="middle">${year}</text>`);
+    xTicks.push(`<line class="grid-line" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/><text class="axis-label" x="${px}" y="${height - 18}" text-anchor="middle">${year}</text>`);
   }
 
   const markers = [];
@@ -105,7 +132,8 @@ function renderChart(prices, projections) {
       const time = new Date(value).getTime();
       if (time < start || time > end) continue;
       const px = x(time);
-      markers.push(`<line class="${css}" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height-margin.bottom}"/><text class="marker-label" x="${px+4}" y="${margin.top+12}" transform="rotate(90 ${px+4} ${margin.top+12})">${esc(kind)} ${item.cycle_number}</text>`);
+      const label = `${kind} ${item.cycle_number} · ${formatShortDate(value)}`;
+      markers.push(`<line class="${css}" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/><text class="marker-label" x="${px + 4}" y="${margin.top + 12}" transform="rotate(90 ${px + 4} ${margin.top + 12})">${esc(label)}</text>`);
     }
   }
 
@@ -119,33 +147,18 @@ function renderChart(prices, projections) {
 async function load() {
   showError(null);
   try {
-    [state.prices, state.cycles] = await Promise.all([api("/api/v1/prices"), api("/api/v1/cycles")]);
+    [state.prices, state.cycles] = await Promise.all([
+      api("/api/v1/prices"),
+      api("/api/v1/cycles")
+    ]);
     render();
   } catch (error) {
     showError(error);
   }
 }
 
-$("model-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  showError(null);
-  const model = {
-    anchor_ath: new Date(`${$("anchor-ath").value}T00:00:00Z`).toISOString(),
-    bear_days: Number($("bear-days").value),
-    bull_days: Number($("bull-days").value),
-    until_year: Number($("until-year").value),
-    tolerance_days: Number($("tolerance-days").value)
-  };
-  try {
-    await api("/api/v1/model", { method: "PUT", body: JSON.stringify(model) });
-    state.cycles = await api(`/api/v1/cycles?until_year=${model.until_year}`);
-    render();
-  } catch (error) {
-    showError(error);
-  }
-});
-
 window.addEventListener("resize", () => {
   if (state.prices?.prices.length > 1) renderChart(state.prices.prices, state.cycles.items);
 });
+
 void load();

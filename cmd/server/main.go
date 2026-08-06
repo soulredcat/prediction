@@ -26,14 +26,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	store := storage.New(cfg.DataFile, cfg.ModelFile)
+	store := storage.New(cfg.DataFile)
 	if err := store.Ensure(); err != nil {
 		logger.Error("store", "error", err)
 		os.Exit(1)
 	}
 
 	marketService := market.NewService(store)
-	cycleService := cycle.NewService(store)
+	cycleService := cycle.NewService()
 	handler := httpapi.New(logger, marketService, cycleService, webassets.Assets)
 
 	server := &http.Server{

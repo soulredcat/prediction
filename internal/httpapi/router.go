@@ -6,13 +6,10 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/soulredcat/prediction/internal/cycle"
 	"github.com/soulredcat/prediction/internal/market"
-	"github.com/soulredcat/prediction/internal/storage"
 )
 
 type Router struct {
@@ -27,8 +24,6 @@ func New(logger *slog.Logger, marketService *market.Service, cycleService *cycle
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", router.health)
 	mux.HandleFunc("GET /api/v1/prices", router.getPrices)
-	mux.HandleFunc("GET /api/v1/model", router.getModel)
-	mux.HandleFunc("PUT /api/v1/model", router.updateModel)
 	mux.HandleFunc("GET /api/v1/cycles", router.getCycles)
 	mux.Handle("GET /", http.FileServerFS(assets))
 	return router.recover(router.logging(securityHeaders(mux)))
@@ -47,48 +42,8 @@ func (r *Router) getPrices(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, value)
 }
 
-func (r *Router) getModel(w http.ResponseWriter, _ *http.Request) {
-	value, err := r.cycle.GetModel()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, value)
-}
-
-func (r *Router) updateModel(w http.ResponseWriter, request *http.Request) {
-	defer request.Body.Close()
-	decoder := json.NewDecoder(http.MaxBytesReader(w, request.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	var value storage.Model
-	if err := decoder.Decode(&value); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	updated, err := r.cycle.UpdateModel(value)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, updated)
-}
-
-func (r *Router) getCycles(w http.ResponseWriter, request *http.Request) {
-	untilYear := 0
-	if raw := strings.TrimSpace(request.URL.Query().Get("until_year")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid until_year"))
-			return
-		}
-		untilYear = parsed
-	}
-	value, err := r.cycle.Generate(untilYear)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, value)
+func (r *Router) getCycles(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, r.cycle.Generate())
 }
 
 func securityHeaders(next http.Handler) http.Handler {

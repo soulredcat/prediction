@@ -1,0 +1,99 @@
+name: refresh-static-comparisons
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/import-comparisons.yml"
+      - "cmd/import-comparisons/**"
+      - "internal/comparison/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-static-comparisons
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Download public daily comparison CSV files
+        run: |
+          mkdir -p /tmp/comparisons
+          curl --fail --location --retry 3 \
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NASDAQ100" \
+            --output /tmp/comparisons/nasdaq100.csv
+          curl --fail --location --retry 3 \
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS" \
+            --output /tmp/comparisons/usd_index.csv
+          curl --fail --location --retry 3 \
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO" \
+            --output /tmp/comparisons/wti.csv
+          curl --fail --location --retry 3 \
+            --user-agent "Mozilla/5.0 (compatible; prediction-data-refresh/1.0)" \
+            "https://stooq.com/q/d/l/?s=xauusd&i=d" \
+            --output /tmp/comparisons/gold.csv
+      - name: Generate static comparison snapshots
+        run: |
+          mkdir -p data/comparisons
+          go run ./cmd/import-comparisons \
+            -id nasdaq100 \
+            -label "Nasdaq-100" \
+            -input /tmp/comparisons/nasdaq100.csv \
+            -format fred \
+            -value-column NASDAQ100 \
+            -source "FRED / Nasdaq" \
+            -source-url "https://fred.stlouisfed.org/series/NASDAQ100" \
+            -output data/comparisons/nasdaq100.json
+          go run ./cmd/import-comparisons \
+            -id usd_index \
+            -label "Broad USD Index" \
+            -input /tmp/comparisons/usd_index.csv \
+            -format fred \
+            -value-column DTWEXBGS \
+            -source "FRED / Federal Reserve" \
+            -source-url "https://fred.stlouisfed.org/series/DTWEXBGS" \
+            -output data/comparisons/usd_index.json
+          go run ./cmd/import-comparisons \
+            -id wti \
+            -label "WTI Oil" \
+            -input /tmp/comparisons/wti.csv \
+            -format fred \
+            -value-column DCOILWTICO \
+            -source "FRED / U.S. EIA" \
+            -source-url "https://fred.stlouisfed.org/series/DCOILWTICO" \
+            -output data/comparisons/wti.json
+          go run ./cmd/import-comparisons \
+            -id gold \
+            -label "Gold (XAU/USD)" \
+            -input /tmp/comparisons/gold.csv \
+            -format stooq \
+            -source "Stooq XAU/USD" \
+            -source-url "https://stooq.com/q/d/?s=xauusd" \
+            -output data/comparisons/gold.json
+      - name: Validate project
+        run: |
+          node --check web/app.js
+          go test ./...
+          go vet ./...
+      - name: Commit refreshed snapshots
+        run: |
+          if git diff --quiet -- data/comparisons; then
+            echo "Comparison snapshots are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/comparisons
+          git commit -m "data: refresh static comparison histories"
+          git pull --rebase origin main
+          git push origin HEAD:main

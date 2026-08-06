@@ -13,7 +13,7 @@
       <div>
         <p class="eyebrow">BITCOIN TIME-CYCLE RESEARCH</p>
         <h1>BTC Cycle Prediction Dashboard</h1>
-        <p class="subtitle">Historical BTC/USD prices are loaded from the repository JSON snapshot. Cycle parameters are fixed in code and projections are shown through year 2200.</p>
+        <p class="subtitle">Historical BTC/USD prices stop at the final repository data point. Future ATH and low dates are rendered separately through year 2200 because the model predicts dates, not future prices.</p>
       </div>
     </header>
 
@@ -28,16 +28,42 @@
 
     <section class="panel">
       <div class="panel-heading">
-        <div><h2>Historical BTC price</h2><p id="chart-meta">Loading repository dataset</p></div>
+        <div>
+          <h2>Historical BTC price</h2>
+          <p id="chart-meta">Loading repository dataset</p>
+        </div>
       </div>
       <div id="chart-empty" class="empty">The static price dataset is empty. Import data into data/btc_prices.json.</div>
       <div id="chart" class="chart hidden"></div>
     </section>
 
     <section class="panel">
+      <div class="panel-heading timeline-heading">
+        <div>
+          <h2>Projected ATH / low timeline through 2200</h2>
+          <p id="timeline-meta">Loading all hardcoded cycle dates.</p>
+        </div>
+        <div class="timeline-actions" aria-label="Timeline navigation">
+          <button id="timeline-start" type="button">Start</button>
+          <button id="timeline-current" type="button">Data end</button>
+          <button id="timeline-end" type="button">Year 2200</button>
+        </div>
+      </div>
+      <div class="timeline-legend" aria-label="Timeline legend">
+        <span><i class="legend-dot legend-ath"></i>Predicted ATH</span>
+        <span><i class="legend-dot legend-low"></i>Predicted low</span>
+        <span><i class="legend-line legend-bear"></i>370-day bear phase</span>
+        <span><i class="legend-line legend-bull"></i>1,055.5-day bull phase</span>
+      </div>
+      <div id="forecast-timeline" class="forecast-timeline-wrap" tabindex="0" aria-label="Horizontally scrollable projected cycle timeline">
+        <div id="forecast-timeline-canvas" class="forecast-timeline-canvas"></div>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-heading">
         <div>
-          <h2>Cycle dates through 2200</h2>
+          <h2>All projected dates</h2>
           <p id="projection-meta">Loading all hardcoded ATH and low dates.</p>
         </div>
       </div>

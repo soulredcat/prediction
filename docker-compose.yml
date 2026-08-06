@@ -6,7 +6,8 @@ services:
       DATA_FILE: /app/data/btc_prices.json
       MODEL_FILE: /app/data/model_config.json
     volumes:
-      - ./data:/app/data:ro
+      - ./data/btc_prices.json:/app/data/btc_prices.json:ro
+      - ./data/model_config.json:/app/data/model_config.json
     ports:
       - "8080:8080"
     restart: unless-stopped

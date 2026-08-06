@@ -40,7 +40,7 @@ jobs:
             --output /tmp/comparisons/wti.csv
           curl --fail --location --retry 3 \
             --user-agent "Mozilla/5.0 (compatible; prediction-data-refresh/1.0)" \
-            "https://stooq.com/q/d/l/?s=xauusd&i=d" \
+            "https://stooq.pl/q/d/l/?s=xauusd&i=d" \
             --output /tmp/comparisons/gold.csv
       - name: Generate static comparison snapshots
         run: |
@@ -78,7 +78,7 @@ jobs:
             -input /tmp/comparisons/gold.csv \
             -format stooq \
             -source "Stooq XAU/USD" \
-            -source-url "https://stooq.com/q/d/?s=xauusd" \
+            -source-url "https://stooq.pl/q/d/?s=xauusd" \
             -output data/comparisons/gold.json
       - name: Validate project
         run: |

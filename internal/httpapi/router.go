@@ -8,22 +8,25 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/soulredcat/prediction/internal/comparison"
 	"github.com/soulredcat/prediction/internal/cycle"
 	"github.com/soulredcat/prediction/internal/market"
 )
 
 type Router struct {
-	logger *slog.Logger
-	market *market.Service
-	cycle  *cycle.Service
-	assets fs.FS
+	logger     *slog.Logger
+	market     *market.Service
+	comparison *comparison.Service
+	cycle      *cycle.Service
+	assets     fs.FS
 }
 
-func New(logger *slog.Logger, marketService *market.Service, cycleService *cycle.Service, assets fs.FS) http.Handler {
-	router := &Router{logger: logger, market: marketService, cycle: cycleService, assets: assets}
+func New(logger *slog.Logger, marketService *market.Service, comparisonService *comparison.Service, cycleService *cycle.Service, assets fs.FS) http.Handler {
+	router := &Router{logger: logger, market: marketService, comparison: comparisonService, cycle: cycleService, assets: assets}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", router.health)
 	mux.HandleFunc("GET /api/v1/prices", router.getPrices)
+	mux.HandleFunc("GET /api/v1/comparisons", router.getComparisons)
 	mux.HandleFunc("GET /api/v1/cycles", router.getCycles)
 	mux.Handle("GET /", http.FileServerFS(assets))
 	return router.recover(router.logging(securityHeaders(mux)))
@@ -35,6 +38,15 @@ func (r *Router) health(w http.ResponseWriter, _ *http.Request) {
 
 func (r *Router) getPrices(w http.ResponseWriter, _ *http.Request) {
 	value, err := r.market.Get()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
+}
+
+func (r *Router) getComparisons(w http.ResponseWriter, _ *http.Request) {
+	value, err := r.comparison.Get()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

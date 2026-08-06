@@ -33,15 +33,14 @@ jobs:
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NASDAQ100" \
             --output /tmp/comparisons/nasdaq100.csv
           curl --fail --location --retry 3 \
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NASDAQXAU" \
+            --output /tmp/comparisons/gold.csv
+          curl --fail --location --retry 3 \
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS" \
             --output /tmp/comparisons/usd_index.csv
           curl --fail --location --retry 3 \
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILWTICO" \
             --output /tmp/comparisons/wti.csv
-          curl --fail --location --retry 3 \
-            --user-agent "Mozilla/5.0 (compatible; prediction-data-refresh/1.0)" \
-            "https://stooq.pl/q/d/l/?s=xauusd&i=d" \
-            --output /tmp/comparisons/gold.csv || true
       - name: Generate static comparison snapshots
         run: |
           mkdir -p data/comparisons
@@ -54,6 +53,15 @@ jobs:
             -source "FRED / Nasdaq" \
             -source-url "https://fred.stlouisfed.org/series/NASDAQ100" \
             -output data/comparisons/nasdaq100.json
+          go run ./cmd/import-comparisons \
+            -id gold \
+            -label "Gold/Silver Sector" \
+            -input /tmp/comparisons/gold.csv \
+            -format fred \
+            -value-column NASDAQXAU \
+            -source "FRED / Nasdaq PHLX Gold-Silver Sector" \
+            -source-url "https://fred.stlouisfed.org/series/NASDAQXAU" \
+            -output data/comparisons/gold.json
           go run ./cmd/import-comparisons \
             -id usd_index \
             -label "Broad USD Index" \
@@ -72,19 +80,6 @@ jobs:
             -source "FRED / U.S. EIA" \
             -source-url "https://fred.stlouisfed.org/series/DCOILWTICO" \
             -output data/comparisons/wti.json
-          if [ -s /tmp/comparisons/gold.csv ] && go run ./cmd/import-comparisons \
-            -id gold \
-            -label "Gold (XAU/USD)" \
-            -input /tmp/comparisons/gold.csv \
-            -format stooq \
-            -source "Stooq XAU/USD" \
-            -source-url "https://stooq.pl/q/d/?s=xauusd" \
-            -output data/comparisons/gold.json; then
-            echo "Gold snapshot generated."
-          else
-            echo "::warning::Gold CSV is unavailable or blocked; publishing the other comparison snapshots."
-            rm -f data/comparisons/gold.json
-          fi
       - name: Validate project
         run: |
           node --check web/app.js

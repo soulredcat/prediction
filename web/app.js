@@ -3,10 +3,13 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const YEAR_MS = 365.2425 * DAY_MS;
 const END_TIME = Date.UTC(2200, 11, 31, 23, 59, 59);
+const COMPARISON_ORDER = ["gold", "nasdaq100", "usd_index", "wti"];
 
 const state = {
   prices: null,
   cycles: null,
+  comparisons: [],
+  activeComparisons: new Set(),
   pixelsPerYear: 82,
   minPixelsPerYear: 20,
   maxPixelsPerYear: 360,
@@ -48,6 +51,10 @@ function escapeHTML(value) {
   })[character]);
 }
 
+function safeClass(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+}
+
 function showError(error) {
   const element = $("error");
   if (!error) {
@@ -81,6 +88,43 @@ function findNearestPrice(prices, timestamp) {
   return Math.abs(new Date(before.timestamp).getTime() - timestamp) <= Math.abs(new Date(after.timestamp).getTime() - timestamp) ? before : after;
 }
 
+function orderedComparisons(series) {
+  return [...series].sort((left, right) => {
+    const leftIndex = COMPARISON_ORDER.indexOf(left.id);
+    const rightIndex = COMPARISON_ORDER.indexOf(right.id);
+    const leftRank = leftIndex < 0 ? 999 : leftIndex;
+    const rightRank = rightIndex < 0 ? 999 : rightIndex;
+    return leftRank - rightRank || left.label.localeCompare(right.label);
+  });
+}
+
+function renderComparisonControls() {
+  const root = $("comparison-controls");
+  const series = orderedComparisons(state.comparisons);
+  if (!series.length) {
+    root.textContent = "No comparison snapshots found.";
+    return;
+  }
+
+  root.innerHTML = series.map((item) => {
+    const css = safeClass(item.id);
+    return `<label class="series-toggle" title="${escapeHTML(item.source)}">
+      <input type="checkbox" data-series-id="${escapeHTML(item.id)}">
+      <i class="comparison-swatch comparison-${css}"></i>
+      ${escapeHTML(item.label)}
+    </label>`;
+  }).join("");
+
+  root.querySelectorAll("input[data-series-id]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = input.dataset.seriesId;
+      if (input.checked) state.activeComparisons.add(id);
+      else state.activeComparisons.delete(id);
+      renderChart({ preserveCenter: true });
+    });
+  });
+}
+
 function updateStatus() {
   const prices = state.prices;
   const cycles = state.cycles;
@@ -90,7 +134,11 @@ function updateStatus() {
   $("model-status").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} days`;
   $("data-status").textContent = first && latest ? `${formatDate(first.timestamp, true)} → ${formatDate(latest.timestamp, true)}` : "No price data";
   $("zoom-status").textContent = `${Math.round(state.pixelsPerYear)} px/year`;
-  $("chart-meta").textContent = `${prices.source} · ${prices.prices.length.toLocaleString("en-GB")} daily prices · price line stops at ${latest ? formatDate(latest.timestamp) : "no data"} · ATH and low dates continue through 2200`;
+  const activeLabels = orderedComparisons(state.comparisons)
+    .filter((item) => state.activeComparisons.has(item.id))
+    .map((item) => item.label);
+  $("comparison-status").textContent = activeLabels.length ? `Overlay: ${activeLabels.join(", ")}` : "No comparison overlays";
+  $("chart-meta").textContent = `${prices.source} · ${prices.prices.length.toLocaleString("en-GB")} daily BTC prices · price line stops at ${latest ? formatDate(latest.timestamp) : "no data"} · ATH and low dates continue through 2200`;
 }
 
 function xTickStep() {
@@ -98,6 +146,41 @@ function xTickStep() {
   if (state.pixelsPerYear >= 110) return 2;
   if (state.pixelsPerYear >= 55) return 5;
   return 10;
+}
+
+function comparisonOverlay(series, start, dataEnd, minLog, maxLog, x, y) {
+  const points = series.points.filter((point) => {
+    const timestamp = new Date(point.timestamp).getTime();
+    return timestamp >= start && timestamp <= dataEnd && Number.isFinite(point.value);
+  });
+  if (points.length < 2 || points[0].value === 0) return "";
+
+  const baseline = points[0].value;
+  const values = points.map((point) => point.value / baseline - 1);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || maximum === minimum) return "";
+
+  const logSpan = maxLog - minLog;
+  const displayMinLog = minLog + logSpan * 0.09;
+  const displaySpan = logSpan * 0.82;
+  const path = points.map((point, index) => {
+    const relative = point.value / baseline - 1;
+    const ratio = (relative - minimum) / (maximum - minimum);
+    const displayPrice = 10 ** (displayMinLog + ratio * displaySpan);
+    return `${index ? "L" : "M"}${x(new Date(point.timestamp).getTime()).toFixed(2)},${y(displayPrice).toFixed(2)}`;
+  }).join(" ");
+
+  const last = points.at(-1);
+  const lastRelative = last.value / baseline - 1;
+  const lastRatio = (lastRelative - minimum) / (maximum - minimum);
+  const lastDisplayPrice = 10 ** (displayMinLog + lastRatio * displaySpan);
+  const css = safeClass(series.id);
+  const change = `${lastRelative >= 0 ? "+" : ""}${(lastRelative * 100).toFixed(1)}%`;
+  const title = `${series.label}: shape-only overlay, ${change} from ${formatDate(points[0].timestamp, true)} to ${formatDate(last.timestamp, true)}`;
+
+  return `<path class="comparison-line comparison-${css}" d="${path}"><title>${escapeHTML(title)}</title></path>
+    <text class="comparison-end-label comparison-${css}-text" x="${x(new Date(last.timestamp).getTime()) + 7}" y="${y(lastDisplayPrice) - 6}">${escapeHTML(series.label)} ${escapeHTML(change)}</text>`;
 }
 
 function renderChart(options = {}) {
@@ -120,7 +203,7 @@ function renderChart(options = {}) {
   const start = new Date(prices[0].timestamp).getTime();
   const dataEnd = new Date(prices.at(-1).timestamp).getTime();
   const rangeYears = (END_TIME - start) / YEAR_MS;
-  const margin = { top: 80, right: 90, bottom: 64, left: 92 };
+  const margin = { top: 80, right: 120, bottom: 64, left: 92 };
   const width = Math.max(viewport.clientWidth, Math.ceil(rangeYears * state.pixelsPerYear) + margin.left + margin.right);
   const height = Math.max(560, viewport.clientHeight - 2);
   const innerW = width - margin.left - margin.right;
@@ -172,19 +255,25 @@ function renderChart(options = {}) {
     }
   }
 
+  const comparisonPaths = orderedComparisons(state.comparisons)
+    .filter((series) => state.activeComparisons.has(series.id))
+    .map((series) => comparisonOverlay(series, start, dataEnd, minLog, maxLog, x, y))
+    .join("");
+
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
-  canvas.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Horizontally scrollable Bitcoin price chart with ATH and low dates through year 2200">
+  canvas.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Horizontally scrollable Bitcoin price chart with optional shape-only comparison overlays and cycle dates through year 2200">
     <rect class="chart-background" x="0" y="0" width="${width}" height="${height}"/>
     <rect class="future-zone" x="${dataEndX}" y="${margin.top}" width="${Math.max(0, width - margin.right - dataEndX)}" height="${innerH}"/>
     ${yTicks.join("")}
     ${xTicks.join("")}
     ${markers.join("")}
+    ${comparisonPaths}
     <path class="price-line" d="${pricePath}"/>
     <line class="data-end-line" x1="${dataEndX}" y1="${margin.top - 8}" x2="${dataEndX}" y2="${height - margin.bottom}"/>
     <text class="data-end-label" x="${dataEndX + 8}" y="${margin.top - 18}">Price data ends · ${escapeHTML(formatDate(prices.at(-1).timestamp, true))}</text>
-    <text class="future-note" x="${dataEndX + 22}" y="${margin.top + 26}">Future area: ATH / LOW dates only — no future price line</text>
-    <text class="axis-title" x="${margin.left}" y="${margin.top - 40}">BTC/USD · logarithmic price scale · drag horizontally · use + / − to zoom</text>
+    <text class="future-note" x="${dataEndX + 22}" y="${margin.top + 26}">Future area: ATH / LOW dates only — no future price or comparison lines</text>
+    <text class="axis-title" x="${margin.left}" y="${margin.top - 40}">BTC/USD · logarithmic BTC price axis · comparison overlays show direction only</text>
   </svg>`;
 
   state.chart = { start, end: END_TIME, dataEnd, dataEndX, width, margin };
@@ -295,10 +384,15 @@ async function load() {
   showError(null);
   bindInteractions();
   try {
-    [state.prices, state.cycles] = await Promise.all([
+    const [prices, cycles, comparisons] = await Promise.all([
       api("/api/v1/prices"),
-      api("/api/v1/cycles")
+      api("/api/v1/cycles"),
+      api("/api/v1/comparisons")
     ]);
+    state.prices = prices;
+    state.cycles = cycles;
+    state.comparisons = comparisons.series || [];
+    renderComparisonControls();
     renderChart();
   } catch (error) {
     showError(error);

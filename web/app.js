@@ -1,6 +1,22 @@
 "use strict";
 
-const state = { prices: null, cycles: null, timeline: null, timelineInitialised: false };
+const DAY_MS = 24 * 60 * 60 * 1000;
+const YEAR_MS = 365.2425 * DAY_MS;
+const END_TIME = Date.UTC(2200, 11, 31, 23, 59, 59);
+
+const state = {
+  prices: null,
+  cycles: null,
+  pixelsPerYear: 82,
+  minPixelsPerYear: 20,
+  maxPixelsPerYear: 360,
+  chart: null,
+  initialised: false,
+  dragging: false,
+  dragStartX: 0,
+  dragStartScrollLeft: 0
+};
+
 const $ = (id) => document.getElementById(id);
 const longDateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -22,6 +38,16 @@ async function api(path) {
   return payload;
 }
 
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
 function showError(error) {
   const element = $("error");
   if (!error) {
@@ -33,64 +59,11 @@ function showError(error) {
   element.classList.remove("hidden");
 }
 
-function formatDateTime(value) {
+function formatDate(value, compact = false) {
   const date = new Date(value);
-  const label = longDateFormatter.format(date);
-  return date.getUTCHours() === 12 ? `${label}, 12:00 UTC` : label;
-}
-
-function formatDateOnly(value) {
-  return longDateFormatter.format(new Date(value));
-}
-
-function formatCompactDate(value) {
-  const date = new Date(value);
-  const label = compactDateFormatter.format(date);
-  return date.getUTCHours() === 12 ? `${label} 12:00` : label;
-}
-
-function render() {
-  const prices = state.prices;
-  const cycles = state.cycles;
-  if (!prices || !cycles) return;
-
-  const latest = prices.prices.at(-1);
-  const first = prices.prices.at(0);
-  const firstProjection = cycles.items.at(0);
-  const lastProjection = cycles.items.at(-1);
-
-  $("metric-model").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} days`;
-  $("metric-points").textContent = prices.prices.length.toLocaleString("en-GB");
-  $("metric-price").textContent = latest ? `$${latest.price_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
-  $("metric-cycles").textContent = `${cycles.items.length} cycles · through ${cycles.model.until_year}`;
-
-  const range = first && latest ? `${formatDateOnly(first.timestamp)} → ${formatDateOnly(latest.timestamp)}` : "empty dataset";
-  const updated = prices.updated_at ? formatDateTime(prices.updated_at) : "repository snapshot";
-  $("chart-meta").textContent = `${prices.source} · ${range} · generated ${updated}`;
-
-  if (firstProjection && lastProjection) {
-    const summary = `All ${cycles.items.length} cycles are displayed. First ATH: ${formatDateTime(firstProjection.ath)}. Final ATH: ${formatDateTime(lastProjection.ath)}. Final low: ${formatDateTime(lastProjection.low)}.`;
-    $("projection-meta").textContent = summary;
-    $("timeline-meta").textContent = `Horizontal date-only forecast from ${formatDateTime(firstProjection.ath)} to ${formatDateTime(lastProjection.low)}. Scroll sideways to inspect every cycle.`;
-  }
-
-  $("cycle-body").innerHTML = cycles.items.map((item) => `<tr>
-    <td>${String(item.cycle_number).padStart(2, "0")}</td>
-    <td>${formatDateTime(item.ath)}</td>
-    <td>${formatDateOnly(item.window_start)} — ${formatDateOnly(item.window_end)}</td>
-    <td>${formatDateTime(item.low)}</td>
-  </tr>`).join("");
-
-  if (prices.prices.length > 1) {
-    $("chart-empty").classList.add("hidden");
-    $("chart").classList.remove("hidden");
-    renderHistoricalChart(prices.prices, cycles.items);
-  } else {
-    $("chart-empty").classList.remove("hidden");
-    $("chart").classList.add("hidden");
-  }
-
-  renderForecastTimeline(cycles.items, latest?.timestamp || null);
+  const formatter = compact ? compactDateFormatter : longDateFormatter;
+  const label = formatter.format(date);
+  return date.getUTCHours() === 12 ? `${label} 12:00 UTC` : label;
 }
 
 function findNearestPrice(prices, timestamp) {
@@ -108,185 +81,228 @@ function findNearestPrice(prices, timestamp) {
   return Math.abs(new Date(before.timestamp).getTime() - timestamp) <= Math.abs(new Date(after.timestamp).getTime() - timestamp) ? before : after;
 }
 
-function renderHistoricalChart(prices, projections) {
-  const root = $("chart");
-  const width = Math.max(root.clientWidth - 36, 720);
-  const height = Math.max(root.clientHeight - 36, 390);
-  const margin = { top: 34, right: 28, bottom: 52, left: 82 };
+function updateStatus() {
+  const prices = state.prices;
+  const cycles = state.cycles;
+  if (!prices || !cycles) return;
+  const first = prices.prices.at(0);
+  const latest = prices.prices.at(-1);
+  $("model-status").textContent = `${cycles.model.bear_days} + ${cycles.model.bull_days} = ${cycles.cycle_days} days`;
+  $("data-status").textContent = first && latest ? `${formatDate(first.timestamp, true)} → ${formatDate(latest.timestamp, true)}` : "No price data";
+  $("zoom-status").textContent = `${Math.round(state.pixelsPerYear)} px/year`;
+  $("chart-meta").textContent = `${prices.source} · ${prices.prices.length.toLocaleString("en-GB")} daily prices · price line stops at ${latest ? formatDate(latest.timestamp) : "no data"} · ATH and low dates continue through 2200`;
+}
+
+function xTickStep() {
+  if (state.pixelsPerYear >= 220) return 1;
+  if (state.pixelsPerYear >= 110) return 2;
+  if (state.pixelsPerYear >= 55) return 5;
+  return 10;
+}
+
+function renderChart(options = {}) {
+  const prices = state.prices?.prices || [];
+  const projections = state.cycles?.items || [];
+  const viewport = $("chart-viewport");
+  const canvas = $("chart-canvas");
+  const empty = $("chart-empty");
+
+  if (prices.length < 2) {
+    empty.classList.remove("hidden");
+    canvas.innerHTML = "";
+    return;
+  }
+  empty.classList.add("hidden");
+
+  const oldWidth = state.chart?.width || viewport.scrollWidth || viewport.clientWidth;
+  const oldCenterRatio = oldWidth > 0 ? (viewport.scrollLeft + viewport.clientWidth / 2) / oldWidth : 0;
+
+  const start = new Date(prices[0].timestamp).getTime();
+  const dataEnd = new Date(prices.at(-1).timestamp).getTime();
+  const rangeYears = (END_TIME - start) / YEAR_MS;
+  const margin = { top: 80, right: 90, bottom: 64, left: 92 };
+  const width = Math.max(viewport.clientWidth, Math.ceil(rangeYears * state.pixelsPerYear) + margin.left + margin.right);
+  const height = Math.max(560, viewport.clientHeight - 2);
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
-  const start = new Date(prices[0].timestamp).getTime();
-  const end = new Date(prices.at(-1).timestamp).getTime();
+
   const logs = prices.map((point) => Math.log10(point.price_usd));
   const minLog = Math.floor(Math.min(...logs));
   const maxLog = Math.ceil(Math.max(...logs));
-  const x = (time) => margin.left + ((time - start) / (end - start)) * innerW;
+  const x = (time) => margin.left + ((time - start) / (END_TIME - start)) * innerW;
   const y = (price) => margin.top + ((maxLog - Math.log10(price)) / (maxLog - minLog)) * innerH;
-  const esc = (value) => String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;"
-  })[character]);
+  const dataEndX = x(dataEnd);
 
-  const path = prices.map((point, index) => `${index ? "L" : "M"}${x(new Date(point.timestamp).getTime()).toFixed(2)},${y(point.price_usd).toFixed(2)}`).join(" ");
+  const pricePath = prices.map((point, index) => `${index ? "L" : "M"}${x(new Date(point.timestamp).getTime()).toFixed(2)},${y(point.price_usd).toFixed(2)}`).join(" ");
+
   const yTicks = [];
   for (let power = minLog; power <= maxLog; power++) {
     const price = 10 ** power;
     const py = y(price);
-    yTicks.push(`<line class="grid-line" x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}"/><text class="axis-label" x="${margin.left - 10}" y="${py + 4}" text-anchor="end">$${price.toLocaleString("en-US")}</text>`);
+    yTicks.push(`<line class="grid-line" x1="${margin.left}" y1="${py}" x2="${width - margin.right}" y2="${py}"/><text class="axis-label" x="${margin.left - 11}" y="${py + 4}" text-anchor="end">$${price.toLocaleString("en-US")}</text>`);
   }
 
-  const startYear = new Date(start).getUTCFullYear();
-  const endYear = new Date(end).getUTCFullYear();
-  const step = Math.max(1, Math.ceil((endYear - startYear) / 8));
   const xTicks = [];
-  for (let year = startYear; year <= endYear; year += step) {
+  const step = xTickStep();
+  const firstYear = new Date(start).getUTCFullYear();
+  const firstTickYear = Math.ceil(firstYear / step) * step;
+  for (let year = firstTickYear; year <= 2200; year += step) {
     const px = x(Date.UTC(year, 0, 1));
-    xTicks.push(`<line class="grid-line" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/><text class="axis-label" x="${px}" y="${height - 18}" text-anchor="middle">${year}</text>`);
+    xTicks.push(`<line class="grid-line" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/><text class="axis-label" x="${px}" y="${height - 22}" text-anchor="middle">${year}</text>`);
   }
 
   const markers = [];
   for (const item of projections) {
-    for (const [kind, value, css] of [["ATH", item.ath, "ath"], ["Low", item.low, "low"]]) {
-      const time = new Date(value).getTime();
-      if (time < start || time > end) continue;
-      const point = findNearestPrice(prices, time);
+    const events = [
+      { kind: "ATH", value: item.ath, lineClass: "forecast-ath-line", dotClass: "ath-dot", labelClass: "ath-label", labelY: 38 },
+      { kind: "LOW", value: item.low, lineClass: "forecast-low-line", dotClass: "low-dot", labelClass: "low-label", labelY: height - margin.bottom - 14 }
+    ];
+
+    for (const event of events) {
+      const time = new Date(event.value).getTime();
+      if (time < start || time > END_TIME) continue;
       const px = x(time);
-      const py = y(point.price_usd);
-      const labelY = kind === "ATH" ? Math.max(margin.top + 14, py - 18) : Math.min(height - margin.bottom - 8, py + 27);
-      const label = `${kind} · ${formatCompactDate(value)}`;
-      markers.push(`<line class="${css}-line" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/>
-        <circle class="historical-marker ${css}-marker" cx="${px}" cy="${py}" r="4.5"><title>${esc(label)}</title></circle>
-        <text class="historical-marker-label ${css}-text" x="${px}" y="${labelY}" text-anchor="middle">${esc(label)}</text>`);
+      const label = `${event.kind} · ${formatDate(event.value, true)}`;
+      let dot = "";
+      if (time <= dataEnd) {
+        const point = findNearestPrice(prices, time);
+        dot = `<circle class="event-dot ${event.dotClass}" cx="${px}" cy="${y(point.price_usd)}" r="4.5"><title>${escapeHTML(label)}</title></circle>`;
+      }
+      markers.push(`<line class="${event.lineClass}" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/>${dot}<text class="event-label ${event.labelClass}" x="${px}" y="${event.labelY}" text-anchor="middle">${escapeHTML(label)}</text>`);
     }
-  }
-
-  root.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Bitcoin historical price logarithmic chart">
-    ${yTicks.join("")}${xTicks.join("")}${markers.join("")}
-    <path class="price-line" d="${path}"/>
-    <text class="axis-label" x="${margin.left}" y="18">BTC/USD · logarithmic scale · historical prices only</text>
-  </svg>`;
-}
-
-function renderForecastTimeline(projections, dataEndValue) {
-  const viewport = $("forecast-timeline");
-  const canvas = $("forecast-timeline-canvas");
-  if (!projections.length) {
-    canvas.textContent = "No cycle projections available.";
-    return;
-  }
-
-  const start = new Date(projections[0].ath).getTime();
-  const end = new Date(projections.at(-1).low).getTime();
-  const years = (end - start) / (365.2425 * 24 * 60 * 60 * 1000);
-  const width = Math.max(4200, Math.ceil(years * 54));
-  const height = 360;
-  const margin = { top: 58, right: 80, bottom: 58, left: 80 };
-  const innerW = width - margin.left - margin.right;
-  const athY = 112;
-  const lowY = 244;
-  const x = (time) => margin.left + ((time - start) / (end - start)) * innerW;
-  const esc = (value) => String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;"
-  })[character]);
-
-  const ticks = [];
-  const firstTickYear = Math.ceil(new Date(start).getUTCFullYear() / 10) * 10;
-  const lastTickYear = new Date(end).getUTCFullYear();
-  for (let year = firstTickYear; year <= lastTickYear; year += 10) {
-    const px = x(Date.UTC(year, 0, 1));
-    ticks.push(`<line class="timeline-grid" x1="${px}" y1="${margin.top}" x2="${px}" y2="${height - margin.bottom}"/><text class="timeline-year" x="${px}" y="${height - 22}" text-anchor="middle">${year}</text>`);
-  }
-
-  const phases = [];
-  const events = [];
-  projections.forEach((item, index) => {
-    const athTime = new Date(item.ath).getTime();
-    const lowTime = new Date(item.low).getTime();
-    const athX = x(athTime);
-    const lowX = x(lowTime);
-    const nextATH = projections[index + 1] ? x(new Date(projections[index + 1].ath).getTime()) : null;
-
-    phases.push(`<line class="timeline-bear-phase" x1="${athX}" y1="${athY}" x2="${lowX}" y2="${lowY}"/>`);
-    if (nextATH !== null) {
-      phases.push(`<line class="timeline-bull-phase" x1="${lowX}" y1="${lowY}" x2="${nextATH}" y2="${athY}"/>`);
-    }
-
-    const cycle = String(item.cycle_number).padStart(2, "0");
-    const athLabel = `Cycle ${cycle} · ATH · ${formatCompactDate(item.ath)}`;
-    const lowLabel = `Cycle ${cycle} · Low · ${formatCompactDate(item.low)}`;
-    events.push(`<circle class="timeline-node timeline-ath-node" cx="${athX}" cy="${athY}" r="6"><title>${esc(formatDateTime(item.ath))}</title></circle>
-      <text class="timeline-event-label timeline-ath-label" x="${athX}" y="${athY - 30}" text-anchor="middle"><tspan x="${athX}" dy="0">Cycle ${cycle} · ATH</tspan><tspan x="${athX}" dy="15">${esc(formatCompactDate(item.ath))}</tspan></text>
-      <circle class="timeline-node timeline-low-node" cx="${lowX}" cy="${lowY}" r="6"><title>${esc(formatDateTime(item.low))}</title></circle>
-      <text class="timeline-event-label timeline-low-label" x="${lowX}" y="${lowY + 29}" text-anchor="middle"><tspan x="${lowX}" dy="0">Cycle ${cycle} · Low</tspan><tspan x="${lowX}" dy="15">${esc(formatCompactDate(item.low))}</tspan></text>`);
-  });
-
-  let dataEndOverlay = "";
-  let dataEndX = margin.left;
-  if (dataEndValue) {
-    const dataEnd = new Date(dataEndValue).getTime();
-    const clamped = Math.max(start, Math.min(end, dataEnd));
-    dataEndX = x(clamped);
-    dataEndOverlay = `<rect class="timeline-future-zone" x="${dataEndX}" y="${margin.top}" width="${Math.max(0, width - margin.right - dataEndX)}" height="${height - margin.top - margin.bottom}"/>
-      <line class="timeline-data-end" x1="${dataEndX}" y1="${margin.top - 10}" x2="${dataEndX}" y2="${height - margin.bottom}"/>
-      <text class="timeline-data-end-label" x="${dataEndX + 8}" y="${margin.top - 18}">Historical data ends · ${esc(formatCompactDate(dataEndValue))}</text>`;
   }
 
   canvas.style.width = `${width}px`;
-  canvas.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Projected ATH and low timeline through year 2200">
-    <rect class="timeline-background" x="0" y="0" width="${width}" height="${height}"/>
-    ${dataEndOverlay}
-    ${ticks.join("")}
-    <line class="timeline-lane" x1="${margin.left}" y1="${athY}" x2="${width - margin.right}" y2="${athY}"/>
-    <line class="timeline-lane" x1="${margin.left}" y1="${lowY}" x2="${width - margin.right}" y2="${lowY}"/>
-    <text class="timeline-lane-label" x="18" y="${athY + 4}">ATH</text>
-    <text class="timeline-lane-label" x="18" y="${lowY + 4}">LOW</text>
-    ${phases.join("")}
-    ${events.join("")}
+  canvas.style.height = `${height}px`;
+  canvas.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Horizontally scrollable Bitcoin price chart with ATH and low dates through year 2200">
+    <rect class="chart-background" x="0" y="0" width="${width}" height="${height}"/>
+    <rect class="future-zone" x="${dataEndX}" y="${margin.top}" width="${Math.max(0, width - margin.right - dataEndX)}" height="${innerH}"/>
+    ${yTicks.join("")}
+    ${xTicks.join("")}
+    ${markers.join("")}
+    <path class="price-line" d="${pricePath}"/>
+    <line class="data-end-line" x1="${dataEndX}" y1="${margin.top - 8}" x2="${dataEndX}" y2="${height - margin.bottom}"/>
+    <text class="data-end-label" x="${dataEndX + 8}" y="${margin.top - 18}">Price data ends · ${escapeHTML(formatDate(prices.at(-1).timestamp, true))}</text>
+    <text class="future-note" x="${dataEndX + 22}" y="${margin.top + 26}">Future area: ATH / LOW dates only — no future price line</text>
+    <text class="axis-title" x="${margin.left}" y="${margin.top - 40}">BTC/USD · logarithmic price scale · drag horizontally · use + / − to zoom</text>
   </svg>`;
 
-  state.timeline = { viewport, width, dataEndX };
-  if (!state.timelineInitialised) {
-    state.timelineInitialised = true;
-    requestAnimationFrame(() => scrollTimeline("current"));
-  }
+  state.chart = { start, end: END_TIME, dataEnd, dataEndX, width, margin };
+  updateStatus();
+
+  requestAnimationFrame(() => {
+    if (options.preserveCenter) {
+      viewport.scrollLeft = Math.max(0, oldCenterRatio * width - viewport.clientWidth / 2);
+    } else if (typeof options.scrollLeft === "number") {
+      viewport.scrollLeft = Math.max(0, options.scrollLeft);
+    } else if (!state.initialised) {
+      state.initialised = true;
+      scrollToDataEnd(false);
+    }
+  });
 }
 
-function scrollTimeline(target) {
-  const timeline = state.timeline;
-  if (!timeline) return;
-  let left = 0;
-  if (target === "current") left = timeline.dataEndX - timeline.viewport.clientWidth * 0.3;
-  if (target === "end") left = timeline.width - timeline.viewport.clientWidth;
-  timeline.viewport.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+function setZoom(nextPixelsPerYear) {
+  const next = Math.max(state.minPixelsPerYear, Math.min(state.maxPixelsPerYear, nextPixelsPerYear));
+  if (Math.abs(next - state.pixelsPerYear) < 0.01) return;
+  state.pixelsPerYear = next;
+  renderChart({ preserveCenter: true });
 }
 
-$("timeline-start").addEventListener("click", () => scrollTimeline("start"));
-$("timeline-current").addEventListener("click", () => scrollTimeline("current"));
-$("timeline-end").addEventListener("click", () => scrollTimeline("end"));
+function fitHistory() {
+  const prices = state.prices?.prices || [];
+  if (prices.length < 2) return;
+  const viewport = $("chart-viewport");
+  const start = new Date(prices[0].timestamp).getTime();
+  const dataEnd = new Date(prices.at(-1).timestamp).getTime();
+  const historyYears = Math.max(1, (dataEnd - start) / YEAR_MS);
+  state.pixelsPerYear = Math.max(state.minPixelsPerYear, Math.min(state.maxPixelsPerYear, (viewport.clientWidth - 190) / historyYears));
+  renderChart({ scrollLeft: 0 });
+}
 
-async function load() {
-  showError(null);
+function scrollToDataEnd(smooth = true) {
+  const viewport = $("chart-viewport");
+  const chart = state.chart;
+  if (!chart) return;
+  viewport.scrollTo({
+    left: Math.max(0, chart.dataEndX - viewport.clientWidth * 0.72),
+    behavior: smooth ? "smooth" : "auto"
+  });
+}
+
+function scrollToYear2200() {
+  const viewport = $("chart-viewport");
+  viewport.scrollTo({ left: viewport.scrollWidth - viewport.clientWidth, behavior: "smooth" });
+}
+
+async function toggleFullscreen() {
   try {
-    [state.prices, state.cycles] = await Promise.all([
-      api("/api/v1/prices"),
-      api("/api/v1/cycles")
-    ]);
-    render();
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
   } catch (error) {
     showError(error);
   }
 }
 
-window.addEventListener("resize", () => {
-  if (!state.prices || !state.cycles) return;
-  if (state.prices.prices.length > 1) renderHistoricalChart(state.prices.prices, state.cycles.items);
-});
+function bindInteractions() {
+  const viewport = $("chart-viewport");
+
+  $("zoom-in").addEventListener("click", () => setZoom(state.pixelsPerYear * 1.35));
+  $("zoom-out").addEventListener("click", () => setZoom(state.pixelsPerYear / 1.35));
+  $("fit-history").addEventListener("click", fitHistory);
+  $("go-data-end").addEventListener("click", () => scrollToDataEnd(true));
+  $("go-2200").addEventListener("click", scrollToYear2200);
+  $("toggle-fullscreen").addEventListener("click", toggleFullscreen);
+
+  viewport.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    state.dragging = true;
+    state.dragStartX = event.clientX;
+    state.dragStartScrollLeft = viewport.scrollLeft;
+    viewport.classList.add("dragging");
+    viewport.setPointerCapture(event.pointerId);
+  });
+
+  viewport.addEventListener("pointermove", (event) => {
+    if (!state.dragging) return;
+    viewport.scrollLeft = state.dragStartScrollLeft - (event.clientX - state.dragStartX);
+  });
+
+  const stopDragging = (event) => {
+    if (!state.dragging) return;
+    state.dragging = false;
+    viewport.classList.remove("dragging");
+    if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+  };
+  viewport.addEventListener("pointerup", stopDragging);
+  viewport.addEventListener("pointercancel", stopDragging);
+
+  viewport.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    setZoom(event.deltaY < 0 ? state.pixelsPerYear * 1.12 : state.pixelsPerYear / 1.12);
+  }, { passive: false });
+
+  document.addEventListener("fullscreenchange", () => {
+    $("toggle-fullscreen").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+    setTimeout(() => renderChart({ preserveCenter: true }), 50);
+  });
+
+  window.addEventListener("resize", () => renderChart({ preserveCenter: true }));
+}
+
+async function load() {
+  showError(null);
+  bindInteractions();
+  try {
+    [state.prices, state.cycles] = await Promise.all([
+      api("/api/v1/prices"),
+      api("/api/v1/cycles")
+    ]);
+    renderChart();
+  } catch (error) {
+    showError(error);
+  }
+}
 
 void load();
